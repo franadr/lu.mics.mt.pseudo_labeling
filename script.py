@@ -10,7 +10,7 @@ from keras.layers import Conv2D, MaxPooling2D
 
 batch_size = 10
 num_classes = 10
-epochs = 290
+epochs = 300
 
 # input image dimensions
 img_rows, img_cols = 28, 28
