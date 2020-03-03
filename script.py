@@ -52,7 +52,7 @@ class PseudoLabeling(Callback):
         self.model = model
         self.t1 = 100
         self.t2 = 600
-        self.num_classes = 1000
+        self.num_classes = 10
         self.n_samples = 60000
         self.x_train_l, self.y_train_l, self.x_train_u, self.y_train_u_real, self.y_train_u_pseudo, self.y_true_full, self.training_steps, self.testing_steps, self.y_test, self.x_test = self.data_preparation()
         self.alpha_s = 0.0
@@ -62,7 +62,6 @@ class PseudoLabeling(Callback):
     def on_epoch_end(self, epoch, logs):
         self.alpha_s = self.alpha(epoch)
         self.y_train[self.unlabeled_indices] = self.model.predict(self.x_train[self.unlabeled_indices])
-        print(f"alpha : {self.alpha_s}")
 
     @staticmethod
     def alpha(step):
@@ -127,7 +126,7 @@ class PseudoLabeling(Callback):
         # init of pseudo labels array
         y_train_u_pseudo = np.zeros(y_train_u_real.shape[0])
 
-        y_train[self.unlabeled_indices] = 0
+        y_train[self.unlabeled_indices] = random.randint(0,9)
         y_train_l = utils.to_categorical(y_train_l, num_classes)
         y_train_u_real = utils.to_categorical(y_train_u_real, num_classes)
         y_train = utils.to_categorical(y_train, 10)
