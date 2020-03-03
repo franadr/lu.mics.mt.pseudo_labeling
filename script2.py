@@ -151,7 +151,7 @@ def train(n_labeled_data):
 
     hist = model.fit_generator(pseudo.train_generator(), steps_per_epoch=pseudo.train_steps_per_epoch,
                                validation_data=pseudo.test_generator(), callbacks=[pseudo],
-                               validation_steps=pseudo.test_stepes_per_epoch, epochs=1).history
+                               validation_steps=pseudo.test_steps_per_epoch, epochs=50).history
     hist["labeled_accuracy"] = pseudo.labeled_accuracy
     hist["unlabeled_accuracy"] = pseudo.unlabeled_accuracy
 

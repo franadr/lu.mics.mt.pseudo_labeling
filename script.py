@@ -10,11 +10,12 @@ from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten
 from keras.layers import Conv2D, MaxPooling2D
 from keras.callbacks import ModelCheckpoint, Callback
+from keras.metrics import categorical_accuracy
 import matplotlib.pyplot as plt
 
-batch_size = 128
+batch_size = 256
 num_classes = 10
-epochs = 100
+epochs =200 
 samples = 60000
 labeled_samples = 10000
 unlabeled_samples = samples - labeled_samples
@@ -61,11 +62,12 @@ class PseudoLabeling(Callback):
     def on_epoch_end(self, epoch, logs):
         self.alpha_s = self.alpha(epoch)
         self.y_train[self.unlabeled_indices] = self.model.predict(self.x_train[self.unlabeled_indices])
+        print(f"alpha : {self.alpha_s}")
 
     @staticmethod
     def alpha(step):
-        t1 = 1
-        t2 = 30
+        t1 = 10
+        t2 = 100
         a = 3
         if step < t1:
             return 0.0
@@ -75,13 +77,17 @@ class PseudoLabeling(Callback):
             return ((step - t1) / (t2 - t1)) * a
 
     def pseudo_loss(self, y_true, y_pred):
-        y_true_item = y_true[:, :self.num_classes]
-        unlabeled_flag = y_true[:, self.num_classes]
-        crossentropy = losses.categorical_crossentropy(y_true=y_true_item, y_pred=y_pred)
-        if unlabeled_flag == 1:
-            return self.alpha_s * crossentropy
-        else:
-            return crossentropy
+        y_true_item = y_true[:, :num_classes]
+        unlabeled_flag = y_true[:, num_classes]
+        entropies = losses.categorical_crossentropy(y_true_item, y_pred)
+        coefs = 1.0 - unlabeled_flag + self.alpha_s * unlabeled_flag 
+        print(f"Unlabeled flag : {unlabeled_flag}")
+        # return coefs * entropies
+        return entropies
+
+    def accuracy(self, y_true, y_pred):
+        y_true_item = y_true[:, :num_classes]
+        return categorical_accuracy(y_true_item, y_pred)
 
     def data_preparation(self):
         # the data, split between train and test sets
@@ -140,12 +146,14 @@ class PseudoLabeling(Callback):
         while True:
             np.random.shuffle(self.indices)
             nbatches = self.n_samples // batch_size
+            y_train_flagged = np.c_[self.y_train, np.zeros(self.y_train.shape[0])]
+            y_train_flagged[self.unlabeled_indices,num_classes] = 1
             for i in range(nbatches):
                 start_batch = i * batch_size
                 end_batch = start_batch + batch_size
                 batch_i = self.indices[start_batch:end_batch]
                 x = self.x_train[batch_i]
-                y = self.y_train[batch_i]
+                y = y_train_flagged[batch_i]
                 yield x, y
 
     def val_batch_gen(self):
@@ -153,12 +161,13 @@ class PseudoLabeling(Callback):
             indices = np.arange(self.y_test.shape[0])
             np.random.shuffle(indices)
             y_test = utils.to_categorical(self.y_test, 10)
+            y_test_flagged = np.c_[y_test, np.zeros(y_test.shape[0])]
             nbatches = len(indices) // batch_size
             for i in range(nbatches):
                 start_batch = i * batch_size
                 end_batch = start_batch + batch_size
                 x = self.x_test[start_batch:end_batch]
-                y = y_test[start_batch:end_batch]
+                y = y_test_flagged[start_batch:end_batch]
                 yield x, y
 
 
@@ -186,19 +195,19 @@ def train_supervised(model, x_train_labeled, y_train_labeled, batch_size):
 model = create_model()
 pl = PseudoLabeling(model, labeled_samples, batch_size)
 
-model.compile(loss=losses.categorical_crossentropy,
+model.compile(loss=pl.pseudo_loss,
               optimizer=optimizers.Adadelta(),
-              metrics=['accuracy'])
+              metrics=[pl.accuracy])
 
-model.fit(pl.x_train[pl.labeled_indices], pl.y_train[pl.labeled_indices],
-          batch_size=256,
-          epochs=30,
-          verbose=1,
-          validation_data=(pl.x_test, utils.to_categorical(pl.y_test, num_classes))
-          )
-score = model.evaluate(pl.x_test, utils.to_categorical(pl.y_test, num_classes), batch_size=128)
-print('\n Evaluate on test data')
-print('test loss, test acc', score)
+# model.fit(pl.x_train[pl.labeled_indices], pl.y_train[pl.labeled_indices],
+#           batch_size=256,
+#           epochs=30,
+#           verbose=1,
+#           validation_data=(pl.x_test, utils.to_categorical(pl.y_test, num_classes))
+#           )
+# score = model.evaluate(pl.x_test, utils.to_categorical(pl.y_test, num_classes), batch_size=128)
+# print('\n Evaluate on test data')
+# print('test loss, test acc', score)
 
 print('Pseudo labeling training :')
 history = model.fit_generator(pl.training_batch_gen(), steps_per_epoch=pl.training_steps,
@@ -206,22 +215,21 @@ history = model.fit_generator(pl.training_batch_gen(), steps_per_epoch=pl.traini
                               validation_steps=pl.testing_steps, epochs=epochs).history
 
 # Plot training & validation accuracy values
-plt.plot(history.history['acc'])
-plt.plot(history.history['val_acc'])
+plt.plot(history['accuracy'])
+plt.plot(history['val_accuracy'])
 plt.title('Model accuracy')
 plt.ylabel('Accuracy')
 plt.xlabel('Epoch')
 plt.legend(['Train', 'Test'], loc='upper left')
 millis = int(round(time.time() * 1000))
-plt.savefig('MNIST-acc{millis}-labels{labeled_samples}.png')
-plt.show()
+plt.savefig(f"MNIST-acc{millis}-labels{labeled_samples}.png")
 
+plt.clf()
 # Plot training & validation loss values
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
+plt.plot(history['loss'])
+plt.plot(history['val_loss'])
 plt.title('Model loss')
 plt.ylabel('Loss')
 plt.xlabel('Epoch')
 plt.legend(['Train', 'Test'], loc='upper left')
-plt.savefig('MNIST-loss{millis}-labels{labeled_samples}.png')
-plt.show()
+plt.savefig(f"MNIST-loss{millis}-labels{labeled_samples}.png")
