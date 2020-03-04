@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 batch_size = 256
 num_classes = 10
-epochs =200 
+epochs = 200
 samples = 60000
 labeled_samples = 10000
 unlabeled_samples = samples - labeled_samples
@@ -58,6 +58,9 @@ class PseudoLabeling(Callback):
         self.alpha_s = 0.0
         self.unlabeled_proportion = self.x_train_u / self.n_samples
         self.unlabeled_proportion = self.x_train_l / self.n_samples
+
+    def on_epoch_begin(self,epoch,logs):
+        self.y_train[self.unlabeled_indices] = self.model.predict(self.x_train[self.unlabeled_indices])
 
     def on_epoch_end(self, epoch, logs):
         self.alpha_s = self.alpha(epoch)
@@ -198,15 +201,16 @@ model.compile(loss=pl.pseudo_loss,
               optimizer=optimizers.Adadelta(),
               metrics=[pl.accuracy])
 
-# model.fit(pl.x_train[pl.labeled_indices], pl.y_train[pl.labeled_indices],
-#           batch_size=256,
-#           epochs=30,
-#           verbose=1,
-#           validation_data=(pl.x_test, utils.to_categorical(pl.y_test, num_classes))
-#           )
-# score = model.evaluate(pl.x_test, utils.to_categorical(pl.y_test, num_classes), batch_size=128)
-# print('\n Evaluate on test data')
-# print('test loss, test acc', score)
+model.fit(pl.x_train[pl.labeled_indices], pl.y_train[pl.labeled_indices],
+          batch_size=256,
+          epochs=50,
+          verbose=1,
+          validation_data=(pl.x_test, utils.to_categorical(pl.y_test, num_classes))
+          )
+score = model.evaluate(pl.x_test, utils.to_categorical(pl.y_test, num_classes), batch_size=128)
+print('\n Evaluate on test data')
+print('test loss, test acc', score)
+
 
 print('Pseudo labeling training :')
 history = model.fit_generator(pl.training_batch_gen(), steps_per_epoch=pl.training_steps,
